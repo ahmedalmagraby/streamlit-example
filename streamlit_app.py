@@ -1,38 +1,88 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
 import streamlit as st
+from googleapiclient.discovery import build
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+import io
 
-"""
-# Welcome to Streamlit!
+# Create a function to fetch comments from the YouTube video
+def fetch_comments(api_key, video_id):
+    youtube = build('youtube', 'v3', developerKey=api_key)
+    comments = []
+    
+    request = youtube.commentThreads().list(
+        part='snippet',
+        videoId=video_id,
+        textFormat='plainText',
+        maxResults=100  # Adjust as needed
+    )
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
+    while request:
+        response = request.execute()
+        
+        for item in response['items']:
+            comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
+            comments.append(comment)
+        
+        request = youtube.commentThreads().list_next(request, response)
+    
+    return comments
 
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
+# Create a Streamlit app
+def main():
+    st.title("YouTube Comment Word Cloud Generator")
 
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+    # Input fields for Video ID and API Key
+    video_id = st.text_input("Enter YouTube Video ID:")
+    api_key = st.text_input("Enter YouTube Data API Key:")
 
+    # Customization options
+    st.sidebar.subheader("Word Cloud Customization")
+    font = st.sidebar.selectbox("Font", ["serif", "sans-serif", "monospace"])
+    font_size = st.sidebar.slider("Font Size", min_value=10, max_value=100, value=40)
+    background_color = st.sidebar.color_picker("Background Color", "#ffffff")
+    wordcloud_color = st.sidebar.color_picker("Word Cloud Color", "#000000")
+    
+    if st.button("Generate Word Cloud"):
+        if not video_id or not api_key:
+            st.error("Please enter a valid Video ID and API Key.")
+        else:
+            st.info("Fetching comments...")
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+            try:
+                comments = fetch_comments(api_key, video_id)
+                
+                if comments:
+                    comment_text = ' '.join(comments)
+                    
+                    # Generate the word cloud with customization options
+                    wordcloud = WordCloud(
+                        width=800,
+                        height=400,
+                        background_color=background_color,
+                        colormap=wordcloud_color,
+                        font_path=None if font == "sans-serif" else font,
+                        font_step=font_size,
+                    ).generate(comment_text)
+                    
+                    # Display the word cloud
+                    st.image(wordcloud.to_array(), use_container_width=True)
 
-    Point = namedtuple('Point', 'x y')
-    data = []
+                    # Option to save the word cloud as an image
+                    save_button = st.button("Save Word Cloud")
+                    if save_button:
+                        buffer = io.BytesIO()
+                        plt.figure(figsize=(8, 4))
+                        plt.imshow(wordcloud, interpolation="bilinear")
+                        plt.axis("off")
+                        plt.savefig(buffer, format="png")
+                        st.markdown(
+                            f"### [Download Word Cloud](data:application/octet-stream;base64,{base64.b64encode(buffer.getvalue()).decode()})"
+                        )
 
-    points_per_turn = total_points / num_turns
+                else:
+                    st.warning("No comments found for this video.")
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
-
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+if __name__ == '__main__':
+    main()

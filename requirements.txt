@@ -1,7 +1,7 @@
 altair
 pandas
 streamlit
-googleapiclient
+google-api-python-client
 wordcloud
 matplotlib
 io

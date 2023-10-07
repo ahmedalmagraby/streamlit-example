@@ -4,4 +4,3 @@ streamlit
 google-api-python-client
 wordcloud
 matplotlib
-io
